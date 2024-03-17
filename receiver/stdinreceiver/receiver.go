@@ -17,19 +17,17 @@ package stdinreceiver
 import (
 	"bufio"
 	"context"
-	"errors"
 	"os"
 	"sync"
 	"time"
 
 	"go.opentelemetry.io/collector/component"
 	"go.opentelemetry.io/collector/consumer"
-	"go.opentelemetry.io/collector/obsreport"
 	"go.opentelemetry.io/collector/pdata/pcommon"
 	"go.opentelemetry.io/collector/pdata/plog"
 	"go.opentelemetry.io/collector/receiver"
+	"go.opentelemetry.io/collector/receiver/receiverhelper"
 	"go.uber.org/multierr"
-	"go.uber.org/zap"
 )
 
 var (
@@ -38,11 +36,11 @@ var (
 
 // stdinReceiver implements the component.MetricsReceiver for stdin metric protocol.
 type stdinReceiver struct {
-	logger       *zap.Logger
 	config       *Config
 	logsConsumer consumer.Logs
-	obsrecv      *obsreport.Receiver
+	obsrecv      *receiverhelper.ObsReport
 	wg           sync.WaitGroup
+	reportStatus func(*component.StatusEvent)
 }
 
 // newLogsReceiver creates the stdin receiver with the given configuration.
@@ -53,12 +51,9 @@ func newLogsReceiver(
 	nextConsumer consumer.Logs,
 ) (receiver.Logs, error) {
 
-	cfg, ok := config.(*Config)
-	if !ok {
-		return nil, errors.New("invalid config")
-	}
+	cfg := config.(*Config)
 
-	obsrecv, err := obsreport.NewReceiver(obsreport.ReceiverSettings{
+	obsrecv, err := receiverhelper.NewObsReport(receiverhelper.ObsReportSettings{
 		ReceiverID:             settings.ID,
 		Transport:              "",
 		ReceiverCreateSettings: settings,
@@ -68,7 +63,7 @@ func newLogsReceiver(
 	}
 
 	r := &stdinReceiver{
-		logger:       settings.Logger,
+		reportStatus: settings.ReportStatus,
 		config:       cfg,
 		logsConsumer: nextConsumer,
 		obsrecv:      obsrecv,
@@ -77,7 +72,7 @@ func newLogsReceiver(
 	return r, nil
 }
 
-func (r *stdinReceiver) startStdinListener(ctx context.Context, logger *zap.Logger, host component.Host) {
+func (r *stdinReceiver) startStdinListener(ctx context.Context) {
 	r.obsrecv.StartLogsOp(ctx)
 	var errs []error
 	i := 0
@@ -101,7 +96,7 @@ func (r *stdinReceiver) startStdinListener(ctx context.Context, logger *zap.Logg
 
 	r.wg.Done()
 	if len(errs) != 0 {
-		host.ReportFatalError(combined)
+		r.reportStatus(component.NewRecoverableErrorEvent(combined))
 	} else {
 		if r.config.StdinClosedHook != nil {
 			r.config.StdinClosedHook()
@@ -110,9 +105,9 @@ func (r *stdinReceiver) startStdinListener(ctx context.Context, logger *zap.Logg
 }
 
 // Start starts the stdin receiver.
-func (r *stdinReceiver) Start(ctx context.Context, host component.Host) error {
+func (r *stdinReceiver) Start(ctx context.Context, _ component.Host) error {
 	r.wg.Add(1)
-	go r.startStdinListener(ctx, r.logger, host)
+	go r.startStdinListener(ctx)
 	return nil
 }
 
