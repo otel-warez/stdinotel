@@ -21,9 +21,10 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/collector/component/componenttest"
 	"go.opentelemetry.io/collector/consumer/consumertest"
-	"go.opentelemetry.io/collector/obsreport"
+	"go.opentelemetry.io/collector/receiver/receiverhelper"
 	"go.opentelemetry.io/collector/receiver/receivertest"
 )
 
@@ -45,13 +46,12 @@ func TestReceiveLines(t *testing.T) {
 	sink := new(consumertest.LogsSink)
 	config := createDefaultConfig()
 	settings := receivertest.NewNopCreateSettings()
-	receiverSettings := obsreport.ReceiverSettings{
+	o, err := receiverhelper.NewObsReport(receiverhelper.ObsReportSettings{
 		ReceiverID:             settings.ID,
 		Transport:              "",
-		ReceiverCreateSettings: settings,
-	}
-	obsrecv, _ := obsreport.NewReceiver(receiverSettings)
-	r := stdinReceiver{logsConsumer: sink, config: config.(*Config), obsrecv: obsrecv}
+		ReceiverCreateSettings: settings})
+	require.NoError(t, err)
+	r := stdinReceiver{logsConsumer: sink, config: config.(*Config), obsrecv: o}
 	err = r.Start(context.Background(), componenttest.NewNopHost())
 	assert.NoError(t, err)
 	write.WriteString("foo\nbar\nfoobar\n")

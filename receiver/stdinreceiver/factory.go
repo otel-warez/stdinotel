@@ -24,7 +24,7 @@ import (
 const (
 	// The value of "type" key in configuration.
 	typeStr        = "stdin"
-	stabilityLevel = component.StabilityLevelAlpha
+	stabilityLevel = component.StabilityLevelDevelopment
 )
 
 type Config struct {
