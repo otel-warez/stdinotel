@@ -36,7 +36,7 @@ type configProvider struct {
 	collector *otelcol.Collector
 }
 
-func (c *configProvider) Get(ctx context.Context, factories otelcol.Factories) (*otelcol.Config, error) {
+func (c *configProvider) Get(_ context.Context, factories otelcol.Factories) (*otelcol.Config, error) {
 	cfg, id := createExporterConfig(factories)
 
 	return &otelcol.Config{
