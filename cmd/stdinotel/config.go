@@ -15,64 +15,15 @@
 package main
 
 import (
-	"context"
 	"os"
 
-	"github.com/atoulme/stdinotel/receiver/stdinreceiver"
+	"github.com/open-telemetry/opentelemetry-collector-contrib/exporter/splunkhecexporter"
 	"go.opentelemetry.io/collector/component"
 	"go.opentelemetry.io/collector/config/configopaque"
-	"go.opentelemetry.io/collector/config/configtelemetry"
 	"go.opentelemetry.io/collector/exporter/otlpexporter"
 	"go.opentelemetry.io/collector/exporter/otlphttpexporter"
 	"go.opentelemetry.io/collector/otelcol"
-	"go.opentelemetry.io/collector/service"
-	"go.opentelemetry.io/collector/service/telemetry"
-	"go.uber.org/zap/zapcore"
-
-	"github.com/open-telemetry/opentelemetry-collector-contrib/exporter/splunkhecexporter"
 )
-
-type configProvider struct {
-	collector *otelcol.Collector
-}
-
-func (c *configProvider) Get(_ context.Context, factories otelcol.Factories) (*otelcol.Config, error) {
-	cfg, id := createExporterConfig(factories)
-
-	return &otelcol.Config{
-		Receivers: map[component.ID]component.Config{
-			component.NewID("stdin"): &stdinreceiver.Config{
-				StdinClosedHook: func() {
-					c.collector.Shutdown()
-				},
-			},
-		},
-		Processors: map[component.ID]component.Config{},
-		Exporters: map[component.ID]component.Config{
-			component.NewID(id): cfg,
-		},
-		Connectors: map[component.ID]component.Config{},
-		Extensions: map[component.ID]component.Config{},
-		Service: service.Config{
-			Telemetry: telemetry.Config{
-				Metrics: telemetry.MetricsConfig{Level: configtelemetry.LevelNone},
-				Logs:    telemetry.LogsConfig{Encoding: "console", Level: zapcore.ErrorLevel},
-			},
-			Extensions: nil,
-			Pipelines: map[component.ID]*service.PipelineConfig{
-				component.NewID("logs"): {
-					Receivers: []component.ID{
-						component.NewID("stdin"),
-					},
-					Processors: []component.ID{},
-					Exporters: []component.ID{
-						component.NewID(id),
-					},
-				},
-			},
-		},
-	}, nil
-}
 
 func createExporterConfig(factories otelcol.Factories) (component.Config, component.Type) {
 	protocol := getProtocol()
@@ -100,20 +51,12 @@ func getProtocol() component.Type {
 	protocol := os.Getenv("STDINOTEL_PROTOCOL")
 	switch protocol {
 	case "splunk_hec":
-		return "splunk_hec"
+		return component.MustNewType("splunk_hec")
 	case "otlp":
-		return "otlp"
+		return component.MustNewType("otlp")
 	case "otlphttp":
-		return "otlphttp"
+		return component.MustNewType("otlphttp")
 	default:
-		return "otlp"
+		return component.MustNewType("otlp")
 	}
-}
-
-func (c configProvider) Watch() <-chan error {
-	return nil
-}
-
-func (c configProvider) Shutdown(_ context.Context) error {
-	return nil
 }

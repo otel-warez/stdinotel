@@ -17,6 +17,7 @@ package stdinreceiver
 import (
 	"bufio"
 	"context"
+	"fmt"
 	"os"
 	"sync"
 	"time"
@@ -40,13 +41,12 @@ type stdinReceiver struct {
 	logsConsumer consumer.Logs
 	obsrecv      *receiverhelper.ObsReport
 	wg           sync.WaitGroup
-	reportStatus func(*component.StatusEvent)
 }
 
 // newLogsReceiver creates the stdin receiver with the given configuration.
 func newLogsReceiver(
 	_ context.Context,
-	settings receiver.CreateSettings,
+	settings receiver.Settings,
 	config component.Config,
 	nextConsumer consumer.Logs,
 ) (receiver.Logs, error) {
@@ -63,7 +63,6 @@ func newLogsReceiver(
 	}
 
 	r := &stdinReceiver{
-		reportStatus: settings.ReportStatus,
 		config:       cfg,
 		logsConsumer: nextConsumer,
 		obsrecv:      obsrecv,
@@ -96,7 +95,7 @@ func (r *stdinReceiver) startStdinListener(ctx context.Context) {
 
 	r.wg.Done()
 	if len(errs) != 0 {
-		r.reportStatus(component.NewRecoverableErrorEvent(combined))
+		fmt.Println(errs)
 	} else {
 		if r.config.StdinClosedHook != nil {
 			r.config.StdinClosedHook()

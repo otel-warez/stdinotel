@@ -34,7 +34,7 @@ type Config struct {
 // NewFactory creates a factory for stdin receiver.
 func NewFactory() receiver.Factory {
 	return receiver.NewFactory(
-		typeStr,
+		component.MustNewType(typeStr),
 		createDefaultConfig,
 		receiver.WithLogs(newLogsReceiver, stabilityLevel))
 }

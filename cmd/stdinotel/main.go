@@ -13,15 +13,17 @@
 // limitations under the License.
 
 // Program stdinotel is an OpenTelemetry Collector binary.
-// This code was first generated, then modified for the purpose of registering a shutdown hook on the stdin receiver.
 package main
 
 import (
-	"log"
-
-	"github.com/spf13/cobra"
+	"context"
+	"github.com/otel-warez/stdinotel/receiver/stdinreceiver"
 	"go.opentelemetry.io/collector/component"
+	"go.opentelemetry.io/collector/component/componenttest"
+	"go.opentelemetry.io/collector/exporter/exportertest"
 	"go.opentelemetry.io/collector/otelcol"
+	"go.opentelemetry.io/collector/receiver/receivertest"
+	"log"
 )
 
 func main() {
@@ -30,41 +32,38 @@ func main() {
 		log.Fatalf("failed to build components: %v", err)
 	}
 
-	info := component.BuildInfo{
-		Command:     "stdinotel",
-		Description: "Standard input to OTLP/HEC collector",
-		Version:     "0.1.0-dev",
-	}
-
-	set := otelcol.CollectorSettings{BuildInfo: info, Factories: factories, ConfigProvider: &configProvider{}}
-
-	if err := run(set); err != nil {
+	if err := run(context.Background(), factories); err != nil {
 		log.Fatal(err)
 	}
 }
 
-func runInteractive(params otelcol.CollectorSettings) error {
-	cmd := createCommand(params)
-	if err := cmd.Execute(); err != nil {
-		log.Fatalf("collector server run finished with error: %v", err)
+func run(ctx context.Context, factories otelcol.Factories) error {
+	cfg, id := createExporterConfig(factories)
+	exporterFactory := factories.Exporters[id]
+	e, err := exporterFactory.CreateLogs(ctx, exportertest.NewNopSettings(), cfg)
+	if err != nil {
+		return err
 	}
 
-	return nil
-}
-
-func createCommand(set otelcol.CollectorSettings) *cobra.Command {
-	rootCmd := &cobra.Command{
-		Use:          set.BuildInfo.Command,
-		Version:      set.BuildInfo.Version,
-		SilenceUsage: true,
-		RunE: func(cmd *cobra.Command, args []string) error {
-			col, err := otelcol.NewCollector(set)
-			if err != nil {
-				return err
-			}
-			set.ConfigProvider.(*configProvider).collector = col
-			return col.Run(cmd.Context())
+	waitCh := make(chan struct{})
+	r, err := factories.Receivers[component.MustNewType("stdin")].CreateLogs(ctx, receivertest.NewNopSettings(), &stdinreceiver.Config{
+		StdinClosedHook: func() {
+			<-waitCh
 		},
+	}, e)
+	if err != nil {
+		return err
 	}
-	return rootCmd
+	err = e.Start(ctx, componenttest.NewNopHost())
+	if err != nil {
+		return err
+	}
+	err = r.Start(ctx, componenttest.NewNopHost())
+	if err != nil {
+		return err
+	}
+	<-waitCh
+
+	_ = r.Shutdown(ctx)
+	return e.Shutdown(ctx)
 }

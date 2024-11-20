@@ -27,7 +27,7 @@ func TestCreateReceiver(t *testing.T) {
 	cfg := createDefaultConfig().(*Config)
 
 	mockLogsConsumer := consumertest.NewNop()
-	lReceiver, err := newLogsReceiver(context.Background(), receivertest.NewNopCreateSettings(), cfg, mockLogsConsumer)
+	lReceiver, err := newLogsReceiver(context.Background(), receivertest.NewNopSettings(), cfg, mockLogsConsumer)
 	assert.Nil(t, err, "receiver creation failed")
 	assert.NotNil(t, lReceiver, "receiver creation failed")
 }
