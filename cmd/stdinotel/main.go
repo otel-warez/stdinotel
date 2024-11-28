@@ -17,53 +17,90 @@ package main
 
 import (
 	"context"
+	"go.opentelemetry.io/collector/receiver"
+	"go.opentelemetry.io/otel/sdk/trace"
+	"log"
+
 	"github.com/otel-warez/stdinotel/receiver/stdinreceiver"
 	"go.opentelemetry.io/collector/component"
-	"go.opentelemetry.io/collector/component/componenttest"
-	"go.opentelemetry.io/collector/exporter/exportertest"
-	"go.opentelemetry.io/collector/otelcol"
-	"go.opentelemetry.io/collector/receiver/receivertest"
-	"log"
+	"go.opentelemetry.io/collector/component/componentstatus"
+	"go.opentelemetry.io/collector/config/configtelemetry"
+	"go.opentelemetry.io/collector/pdata/pcommon"
+	"go.opentelemetry.io/otel/metric"
+	noopmetric "go.opentelemetry.io/otel/metric/noop"
+	"go.uber.org/zap"
 )
 
 func main() {
-	factories, err := components()
-	if err != nil {
-		log.Fatalf("failed to build components: %v", err)
-	}
-
-	if err := run(context.Background(), factories); err != nil {
+	if err := run(); err != nil {
 		log.Fatal(err)
 	}
 }
 
-func run(ctx context.Context, factories otelcol.Factories) error {
-	cfg, id := createExporterConfig(factories)
-	exporterFactory := factories.Exporters[id]
-	e, err := exporterFactory.CreateLogs(ctx, exportertest.NewNopSettings(), cfg)
+func run() error {
+	h := ttyHost{
+		errStatus: make(chan error, 1),
+	}
+	var logger *zap.Logger
+	logger, err := zap.NewDevelopment()
+	settings := component.TelemetrySettings{
+		Logger: logger,
+		LeveledMeterProvider: func(_ configtelemetry.Level) metric.MeterProvider {
+			return noopmetric.NewMeterProvider()
+		},
+		TracerProvider: trace.NewTracerProvider(),
+		MeterProvider:  noopmetric.NewMeterProvider(),
+		MetricsLevel:   configtelemetry.LevelNone,
+		Resource:       pcommon.NewResource(),
+	}
+
+	e, err := createExporter(settings)
 	if err != nil {
 		return err
 	}
 
-	waitCh := make(chan struct{})
-	r, err := factories.Receivers[component.MustNewType("stdin")].CreateLogs(ctx, receivertest.NewNopSettings(), &stdinreceiver.Config{
-		StdinClosedHook: func() {
-			<-waitCh
-		},
-	}, e)
+	ctx := context.Background()
+
+	r, err := stdinreceiver.NewFactory().CreateLogs(ctx, receiver.Settings{
+		TelemetrySettings: settings,
+	}, &stdinreceiver.Config{}, e)
 	if err != nil {
 		return err
 	}
-	err = e.Start(ctx, componenttest.NewNopHost())
+
+	err = e.Start(ctx, h)
 	if err != nil {
 		return err
 	}
-	err = r.Start(ctx, componenttest.NewNopHost())
+	err = r.Start(ctx, h)
 	if err != nil {
 		return err
 	}
-	<-waitCh
+
+	err = <-h.errStatus
 
 	_ = r.Shutdown(ctx)
-	return e.Shutdown(ctx)
+	_ = e.Shutdown(ctx)
+
+	return err
+}
+
+var _ component.Host = ttyHost{}
+var _ componentstatus.Reporter = ttyHost{}
+
+type ttyHost struct {
+	errStatus chan error
+}
+
+func (t ttyHost) Report(event *componentstatus.Event) {
+	if event.Status() == componentstatus.StatusStopping {
+		close(t.errStatus)
+	}
+	if event.Err() != nil {
+		t.errStatus <- event.Err()
+	}
+}
+
+func (t ttyHost) GetExtensions() map[component.ID]component.Component {
+	return nil
 }

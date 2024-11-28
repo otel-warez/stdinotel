@@ -16,10 +16,15 @@ package stdinreceiver
 
 import (
 	"bufio"
+	"bytes"
 	"context"
-	"fmt"
+	"errors"
+	"go.opentelemetry.io/collector/component/componentstatus"
+	"golang.org/x/term"
+	"io"
 	"os"
-	"sync"
+	"os/signal"
+	"syscall"
 	"time"
 
 	"go.opentelemetry.io/collector/component"
@@ -28,7 +33,6 @@ import (
 	"go.opentelemetry.io/collector/pdata/plog"
 	"go.opentelemetry.io/collector/receiver"
 	"go.opentelemetry.io/collector/receiver/receiverhelper"
-	"go.uber.org/multierr"
 )
 
 var (
@@ -40,7 +44,7 @@ type stdinReceiver struct {
 	config       *Config
 	logsConsumer consumer.Logs
 	obsrecv      *receiverhelper.ObsReport
-	wg           sync.WaitGroup
+	done         chan bool
 }
 
 // newLogsReceiver creates the stdin receiver with the given configuration.
@@ -66,47 +70,88 @@ func newLogsReceiver(
 		config:       cfg,
 		logsConsumer: nextConsumer,
 		obsrecv:      obsrecv,
+		done:         make(chan bool, 1),
 	}
 
 	return r, nil
 }
 
-func (r *stdinReceiver) startStdinListener(ctx context.Context) {
-	r.obsrecv.StartLogsOp(ctx)
-	var errs []error
-	i := 0
+func (r *stdinReceiver) runStdinInteractive(ctx context.Context, host component.Host) {
 	reader := bufio.NewReader(stdin)
 	scanner := bufio.NewScanner(reader)
-	scanner.Split(bufio.ScanLines) // Set up the split function.
-	for scanner.Scan() {
-		line := scanner.Text()
-		err := r.consumeLine(ctx, line)
-		if err != nil {
-			errs = append(errs, err)
-		} else {
-			i++
-		}
+	if term.IsTerminal(int(os.Stdout.Fd())) {
+		interruptChan := make(chan os.Signal, 1)
+		go func() {
+			select {
+			case <-interruptChan:
+				componentstatus.ReportStatus(host, componentstatus.NewRecoverableErrorEvent(errors.New("stdin interrupt")))
+			case <-r.done:
+				return
+			}
+		}()
+		signal.Notify(interruptChan, syscall.SIGINT, syscall.SIGTERM)
 	}
-	if err := scanner.Err(); err != nil {
-		errs = append(errs, err)
-	}
-	combined := multierr.Combine(errs...)
-	r.obsrecv.EndLogsOp(ctx, "", i, combined)
 
-	r.wg.Done()
-	if len(errs) != 0 {
-		fmt.Println(errs)
-	} else {
-		if r.config.StdinClosedHook != nil {
-			r.config.StdinClosedHook()
+	scanner.Split(bufio.ScanLines) // Set up the split function.
+
+	for {
+		switch {
+		case scanner.Scan():
+			if scanner.Err() != nil {
+				componentstatus.ReportStatus(host, componentstatus.NewRecoverableErrorEvent(errors.New("stdin closed")))
+				continue
+			}
+			line := scanner.Text()
+			if line == "" {
+				componentstatus.ReportStatus(host, componentstatus.NewRecoverableErrorEvent(errors.New("user end of input")))
+				continue
+			}
+			r.obsrecv.StartLogsOp(ctx)
+			err := r.consumeLine(ctx, line)
+			r.obsrecv.EndLogsOp(ctx, "stdin", 1, err)
+			if err != nil {
+				componentstatus.ReportStatus(host, componentstatus.NewPermanentErrorEvent(err))
+			}
+		case <-r.done:
+			return
 		}
+
 	}
 }
 
+func (r *stdinReceiver) runStdinPiped(ctx context.Context, host component.Host) {
+	var scanner *bufio.Scanner
+	data, err := io.ReadAll(stdin)
+	if err != nil {
+		componentstatus.ReportStatus(host, componentstatus.NewFatalErrorEvent(errors.New("cannot read stdin")))
+	}
+	scanner = bufio.NewScanner(bytes.NewReader(data))
+
+	scanner.Split(bufio.ScanLines) // Set up the split function.
+
+	for scanner.Scan() {
+		if err := scanner.Err(); err != nil {
+			componentstatus.ReportStatus(host, componentstatus.NewPermanentErrorEvent(err))
+			continue
+		}
+		line := scanner.Text()
+		r.obsrecv.StartLogsOp(ctx)
+		err := r.consumeLine(ctx, line)
+		r.obsrecv.EndLogsOp(ctx, "stdin", 1, err)
+		if err != nil {
+			componentstatus.ReportStatus(host, componentstatus.NewPermanentErrorEvent(err))
+		}
+	}
+	componentstatus.ReportStatus(host, componentstatus.NewEvent(componentstatus.StatusStopping))
+}
+
 // Start starts the stdin receiver.
-func (r *stdinReceiver) Start(ctx context.Context, _ component.Host) error {
-	r.wg.Add(1)
-	go r.startStdinListener(ctx)
+func (r *stdinReceiver) Start(ctx context.Context, host component.Host) error {
+	if isInputPiped() {
+		go r.runStdinPiped(ctx, host)
+	} else {
+		go r.runStdinInteractive(ctx, host)
+	}
 	return nil
 }
 
@@ -123,6 +168,13 @@ func (r *stdinReceiver) consumeLine(ctx context.Context, line string) error {
 
 // Shutdown shuts down the stdin receiver.
 func (r *stdinReceiver) Shutdown(context.Context) error {
-	r.wg.Wait()
+	if r.done != nil {
+		close(r.done)
+	}
 	return nil
+}
+
+func isInputPiped() bool {
+	stat, _ := os.Stdin.Stat()
+	return (stat.Mode() & os.ModeCharDevice) == 0
 }

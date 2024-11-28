@@ -31,7 +31,7 @@ import (
 func TestConsumeLine(t *testing.T) {
 	sink := new(consumertest.LogsSink)
 	config := createDefaultConfig()
-	r := stdinReceiver{logsConsumer: sink, config: config.(*Config)}
+	r := stdinReceiver{logsConsumer: sink, config: config.(*Config), done: make(chan bool, 1)}
 	r.consumeLine(context.Background(), "foo")
 	lds := sink.AllLogs()
 	assert.Equal(t, 1, len(lds))
@@ -45,13 +45,13 @@ func TestReceiveLines(t *testing.T) {
 	stdin = read
 	sink := new(consumertest.LogsSink)
 	config := createDefaultConfig()
-	settings := receivertest.NewNopCreateSettings()
+	settings := receivertest.NewNopSettings()
 	o, err := receiverhelper.NewObsReport(receiverhelper.ObsReportSettings{
 		ReceiverID:             settings.ID,
 		Transport:              "",
 		ReceiverCreateSettings: settings})
 	require.NoError(t, err)
-	r := stdinReceiver{logsConsumer: sink, config: config.(*Config), obsrecv: o}
+	r := stdinReceiver{logsConsumer: sink, config: config.(*Config), obsrecv: o, done: make(chan bool, 1)}
 	err = r.Start(context.Background(), componenttest.NewNopHost())
 	assert.NoError(t, err)
 	write.WriteString("foo\nbar\nfoobar\n")

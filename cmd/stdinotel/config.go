@@ -15,6 +15,10 @@
 package main
 
 import (
+	"context"
+	"github.com/open-telemetry/opentelemetry-collector-contrib/exporter/fileexporter"
+	"go.opentelemetry.io/collector/config/configretry"
+	"go.opentelemetry.io/collector/exporter"
 	"os"
 
 	"github.com/open-telemetry/opentelemetry-collector-contrib/exporter/splunkhecexporter"
@@ -22,29 +26,64 @@ import (
 	"go.opentelemetry.io/collector/config/configopaque"
 	"go.opentelemetry.io/collector/exporter/otlpexporter"
 	"go.opentelemetry.io/collector/exporter/otlphttpexporter"
-	"go.opentelemetry.io/collector/otelcol"
 )
 
-func createExporterConfig(factories otelcol.Factories) (component.Config, component.Type) {
+func createExporter(settings component.TelemetrySettings) (exporter.Logs, error) {
 	protocol := getProtocol()
-	cfg := factories.Exporters[protocol].CreateDefaultConfig()
-	if splunkCfg, ok := cfg.(*splunkhecexporter.Config); ok {
-		splunkCfg.Endpoint = os.Getenv("STDINOTEL_ENDPOINT")
+	exporters, _ := exporter.MakeFactoryMap(
+		otlpexporter.NewFactory(),
+		otlphttpexporter.NewFactory(),
+		fileexporter.NewFactory(),
+		splunkhecexporter.NewFactory(),
+	)
+
+	cfg := exporters[protocol].CreateDefaultConfig()
+
+	switch cfg.(type) {
+	case *splunkhecexporter.Config:
+		splunkCfg := cfg.(*splunkhecexporter.Config)
+		if endpoint := os.Getenv("STDINOTEL_ENDPOINT"); endpoint != "" {
+			splunkCfg.Endpoint = endpoint
+		}
 		splunkCfg.Token = configopaque.String(os.Getenv("STDINOTEL_TOKEN"))
 		splunkCfg.Index = os.Getenv("STDINOTEL_SPLUNK_INDEX")
 		splunkCfg.TLSSetting.InsecureSkipVerify = os.Getenv("STDINOTEL_TLS_INSECURE_SKIP_VERIFY") == "true"
+		splunkCfg.BackOffConfig = configretry.BackOffConfig{
+			Enabled: false,
+		}
+	case *otlpexporter.Config:
+		otlpCfg := cfg.(*otlpexporter.Config)
+		if endpoint := os.Getenv("STDINOTEL_ENDPOINT"); endpoint != "" {
+			otlpCfg.Endpoint = endpoint
+		} else {
+			otlpCfg.Endpoint = "dns:///localhost:4317"
+		}
+		if os.Getenv("STDINOTEL_TLS_INSECURE_SKIP_VERIFY") == "true" {
+			otlpCfg.TLSSetting.InsecureSkipVerify = true
+			otlpCfg.TLSSetting.Insecure = true
+		}
+		otlpCfg.RetryConfig = configretry.BackOffConfig{
+			Enabled: false,
+		}
+	case *otlphttpexporter.Config:
+		otlpCfg := cfg.(*otlphttpexporter.Config)
+		if endpoint := os.Getenv("STDINOTEL_ENDPOINT"); endpoint != "" {
+			otlpCfg.Endpoint = endpoint
+		} else {
+			otlpCfg.Endpoint = "dns:///localhost:4318"
+		}
+		if os.Getenv("STDINOTEL_TLS_INSECURE_SKIP_VERIFY") == "true" {
+			otlpCfg.TLSSetting.InsecureSkipVerify = true
+			otlpCfg.TLSSetting.Insecure = true
+		}
+		otlpCfg.RetryConfig = configretry.BackOffConfig{
+			Enabled: false,
+		}
+	}
 
-	}
-	if otlpCfg, ok := cfg.(*otlpexporter.Config); ok {
-		otlpCfg.Endpoint = os.Getenv("STDINOTEL_ENDPOINT")
-		otlpCfg.TLSSetting.InsecureSkipVerify = os.Getenv("STDINOTEL_TLS_INSECURE_SKIP_VERIFY") == "true"
-	}
-	if otlphttpCfg, ok := cfg.(*otlphttpexporter.Config); ok {
-		otlphttpCfg.Endpoint = os.Getenv("STDINOTEL_ENDPOINT")
-		otlphttpCfg.TLSSetting.InsecureSkipVerify = os.Getenv("STDINOTEL_TLS_INSECURE_SKIP_VERIFY") == "true"
-	}
-
-	return cfg, protocol
+	return exporters[protocol].CreateLogs(context.Background(), exporter.Settings{
+		TelemetrySettings: settings,
+	}, cfg)
 }
 
 func getProtocol() component.Type {

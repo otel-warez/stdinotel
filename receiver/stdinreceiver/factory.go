@@ -28,7 +28,6 @@ const (
 )
 
 type Config struct {
-	StdinClosedHook func()
 }
 
 // NewFactory creates a factory for stdin receiver.

@@ -1,22 +1,8 @@
-version: "3"
 services:
-  # Splunk Enterprise server:
-  splunk:
-    platform: linux/amd64
-    image: splunk/splunk:9.0.4
-    container_name: splunk
-    environment:
-      - SPLUNK_START_ARGS=--accept-license
-      - SPLUNK_HEC_TOKEN=00000000-0000-0000-0000-0000000000000
-      - SPLUNK_PASSWORD=changeme
+  # Collector core:
+  collector:
+    image: otel/opentelemetry-collector:latest
     ports:
-      - "18000:8000"
-      - "18088:8088"
-    healthcheck:
-      test: [ 'CMD', 'curl', '-f', 'http://localhost:8000' ]
-      interval: 5s
-      timeout: 5s
-      retries: 20
+      - "4317:4317"
     volumes:
-      - /opt/splunk/var
-      - /opt/splunk/etc
+      - ./config.yaml:/etc/otelcol/config.yaml

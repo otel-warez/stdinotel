@@ -35,3 +35,13 @@ See #Building instead.
 ```shell
 $> make stdinotel
 ```
+
+## Standard in
+stdinotel consumes data passed in via standard input.
+
+### Piping
+If it receives data via pipe, the program consumes all data passed in, blocking until such time it sends it out.
+It exits right away.
+
+### Interactive
+If it 
