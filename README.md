@@ -11,10 +11,8 @@ $> cat file.txt | stdinotel
 ## Installation
 
 ```shell
-$> go install github.com/otel-warez/stdinotel/cmd/stdinotel@latest
+$> go install github.com/otel-warez/stdinotel@latest
 ```
-
-See #Building instead.
 
 ## Configuration
 
