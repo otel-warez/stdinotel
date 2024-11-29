@@ -24,4 +24,22 @@ LINT                := $(TOOLS_BIN_DIR)/golangci-lint
 .PHONY: fmt
 fmt: $(GOIMPORTS)
 	gofmt  -w -s ./
-	$(GOIMPORTS) -w  -local github.com/atoulme/stdinotel ./
+	$(GOIMPORTS) -w  -local github.com/otel-warez/stdinotel ./
+
+.PHONY: install-tools
+install-tools: $(TOOLS_BIN_NAMES)
+
+$(TOOLS_BIN_DIR):
+	mkdir -p $@
+
+$(TOOLS_BIN_NAMES): $(TOOLS_BIN_DIR) $(TOOLS_MOD_DIR)/go.mod
+	cd $(TOOLS_MOD_DIR) && $(GOCMD) build -o $@ -trimpath $(filter %/$(notdir $@),$(TOOLS_PKG_NAMES))
+
+.PHONY: lint
+lint: $(LINT) addlicense misspell
+	$(LINT) run --allow-parallel-runners --build-tags integration
+
+.PHONY: tidy
+tidy:
+	rm -fr go.sum
+	$(GOCMD) mod tidy -compat=1.23

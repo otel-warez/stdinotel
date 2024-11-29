@@ -19,13 +19,14 @@ import (
 	"bytes"
 	"context"
 	"errors"
-	"go.opentelemetry.io/collector/component/componentstatus"
-	"golang.org/x/term"
 	"io"
 	"os"
 	"os/signal"
 	"syscall"
 	"time"
+
+	"go.opentelemetry.io/collector/component/componentstatus"
+	"golang.org/x/term"
 
 	"go.opentelemetry.io/collector/component"
 	"go.opentelemetry.io/collector/consumer"

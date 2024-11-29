@@ -44,4 +44,4 @@ If it receives data via pipe, the program consumes all data passed in, blocking 
 It exits right away.
 
 ### Interactive
-If stdinotel is run in an interactive CLI, you can exit by entering enter, Ctrl+C or Ctrl+D.
+If stdinotel is run in an interactive CLI, you can exit by entering an empty line, Ctrl+C or Ctrl+D.

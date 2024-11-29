@@ -16,10 +16,11 @@ package main
 
 import (
 	"context"
+	"os"
+
 	"github.com/open-telemetry/opentelemetry-collector-contrib/exporter/fileexporter"
 	"go.opentelemetry.io/collector/config/configretry"
 	"go.opentelemetry.io/collector/exporter"
-	"os"
 
 	"github.com/open-telemetry/opentelemetry-collector-contrib/exporter/splunkhecexporter"
 	"go.opentelemetry.io/collector/component"

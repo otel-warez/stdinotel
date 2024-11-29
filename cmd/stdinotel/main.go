@@ -17,11 +17,11 @@ package main
 
 import (
 	"context"
-	"go.opentelemetry.io/collector/receiver"
-	"go.opentelemetry.io/otel/sdk/trace"
 	"log"
 
-	"github.com/otel-warez/stdinotel/receiver/stdinreceiver"
+	"go.opentelemetry.io/collector/receiver"
+	"go.opentelemetry.io/otel/sdk/trace"
+
 	"go.opentelemetry.io/collector/component"
 	"go.opentelemetry.io/collector/component/componentstatus"
 	"go.opentelemetry.io/collector/config/configtelemetry"
@@ -29,6 +29,8 @@ import (
 	"go.opentelemetry.io/otel/metric"
 	noopmetric "go.opentelemetry.io/otel/metric/noop"
 	"go.uber.org/zap"
+
+	"github.com/otel-warez/stdinotel/receiver/stdinreceiver"
 )
 
 func main() {
