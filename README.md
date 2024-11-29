@@ -10,8 +10,6 @@ $> cat file.txt | stdinotel
 
 ## Installation
 
-NOT YET NOT YET NOT YET
-
 ```shell
 $> go install github.com/otel-warez/stdinotel/cmd/stdinotel@latest
 ```
