@@ -1,4 +1,4 @@
-module github.com/otel-warez/stdinotel
+module github.com/otel-warez/stdinotel/cmd/stdinotel
 
 go 1.23.0
 
