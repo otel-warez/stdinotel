@@ -3,9 +3,14 @@
 GO ?= go
 
 .PHONY: setup
-setup:
-	wget
-
+setup: Makefile.Common internal/tools
+	wget https://raw.githubusercontent.com/otel-warez/build-tools/refs/heads/main/Makefile.Common
+	mkdir -p internal/tools
+	wget https://raw.githubusercontent.com/otel-warez/build-tools/refs/heads/main/tools/Makefile internal/tools/Makefile
+	wget https://raw.githubusercontent.com/otel-warez/build-tools/refs/heads/main/tools/empty_test.go internal/tools/empty_test.go
+	wget https://raw.githubusercontent.com/otel-warez/build-tools/refs/heads/main/tools/go.mod internal/tools/go.mod
+	wget https://raw.githubusercontent.com/otel-warez/build-tools/refs/heads/main/tools/go.sum internal/tools/go.sum
+	wget https://raw.githubusercontent.com/otel-warez/build-tools/refs/heads/main/tools/tools.go internal/tools/tools.go
 
 # Build the Collector executable.
 .PHONY: stdinotel
