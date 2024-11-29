@@ -1,2 +1,4 @@
 bin/*
 .tools
+internal/tools
+Makefile.Common
